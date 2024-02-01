@@ -1,0 +1,27 @@
+{
+  "name": "ixmilia.calc",
+  "version": "0.1.0",
+  "description": "A graphing calculator",
+  "main": "./out/index.js",
+  "type": "module",
+  "scripts": {
+    "compile:tsc": "tsc -p ./",
+    "compile:webpack": "webpack-cli ./out/main.js -o ./out/client-full/ --mode development --config webpack.config.js",
+    "compile:all": "npm run compile:tsc && npm run compile:webpack",
+    "//compile": "npm run compile:all && npm run build-icons",
+    "build": "npm run compile:tsc",
+    "test:run": "mocha out/tests/**/*.test.js",
+    "test": "npm run build && npm run test:run",
+    "watch": "tsc -watch -p ./"
+  },
+  "repository": "https://github.com/ixmilia/calc",
+  "author": "IxMilia",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "chai": "^5.0.3",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.3"
+  }
+}
