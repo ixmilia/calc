@@ -1,10 +1,21 @@
-import { Expression } from './expression.js';
+import { Expression } from "./expression.js";
 
 function main() {
-    document.getElementById('the-button')!.addEventListener('click', () => {
-        const e = new Expression();
-        const message = `The expression is ${e}`;
-        alert(message);
+    const results = <HTMLTextAreaElement>document.getElementById('results')!;
+    const input = <HTMLInputElement>document.getElementById('input')!;
+    const evalButton = <HTMLButtonElement>document.getElementById('eval')!;
+
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            evalButton.click();
+            input.focus();
+        }
+    });
+    evalButton.addEventListener('click', () => {
+        const result = Expression.evaluate(input.value);
+        results.textContent += `${input.value}\n\t${result}\n`;
+        results.scrollTop = results.scrollHeight;
+        input.value = '';
     });
 }
 
