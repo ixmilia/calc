@@ -6,12 +6,12 @@
   "type": "module",
   "scripts": {
     "compile:tsc": "tsc -p ./",
-    "compile:webpack": "webpack-cli ./out/main.js -o ./out/client-full/ --mode development --config webpack.config.js",
-    "compile:all": "npm run compile:tsc && npm run compile:webpack",
-    "//compile": "npm run compile:all && npm run build-icons",
-    "build": "npm run compile:tsc",
+    "compile:rollup": "npx rollup -c rollup.config.js ./out/src/index.js --file ./dist/app.js --format iife",
+    "compile:copyres": "npx copyfiles --error --verbose --up 2 \"./src/resources/**/*\" ./dist",
+    "compile": "npm run compile:tsc && npm run compile:rollup && npm run compile:copyres",
+    "build": "npm run compile",
     "test:run": "mocha out/tests/**/*.test.js",
-    "test": "npm run build && npm run test:run",
+    "test": "npm run compile:tsc && npm run test:run",
     "watch": "tsc -watch -p ./"
   },
   "repository": "https://github.com/ixmilia/calc",
@@ -21,7 +21,9 @@
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
     "chai": "^5.0.3",
+    "copyfiles": "^2.4.1",
     "mocha": "^10.2.0",
+    "rollup": "^4.9.6",
     "typescript": "^5.3.3"
   }
 }

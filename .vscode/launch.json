@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "msedge",
+      "name": "Launch App",
+      "request": "launch",
+      "runtimeArgs": [
+        "--remote-debugging-port=9222",
+        "--auto-open-devtools-for-tabs"
+      ],
+      "url": "file://${workspaceFolder}/dist/index.html"
+    },
+    {
+      "type": "msedge",
+      "name": "Open Edge DevTools",
+      "request": "attach",
+      "port": 9222,
+      "timeout": 60000,
+      "webRoot": "${workspaceFolder}/dist"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Launch and Attach",
+      "configurations": [
+        "Launch App",
+        "Open Edge DevTools"
+      ]
+    }
+  ]
+}
