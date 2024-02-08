@@ -2,39 +2,28 @@ import { expect } from 'chai';
 import { Expression } from '../src/expression.js';
 
 describe('expression', () => {
-    describe('tokens', () => {
+    describe('parsing', () => {
         it('can be parsed', () => {
-            const tokens = Expression.tokenize('-3+4');
-            expect(tokens).to.deep.equal([
-                {
-                    associativity: 'right',
-                    position: 0,
-                    precedence: 5,
-                    text: '~',
-                    type: 'operator',
-                    value: '~'
+            const expr = Expression.parse('-3+4');
+            const o: any = expr;
+            expect(expr).to.deep.contain({
+                left: {
+                    operator: {
+                        ...o.left.operator,
+                        symbol: '~',
+                    },
+                    operand: {
+                        value: 3,
+                    },
                 },
-                {
-                    position: 1,
-                    text: '3',
-                    type: 'number',
-                    value: 3
+                operator: {
+                    ...o.operator,
+                    symbol: '+',
                 },
-                {
-                    associativity: 'left',
-                    position: 2,
-                    precedence: 2,
-                    text: '+',
-                    type: 'operator',
-                    value: '+'
+                right: {
+                    value: 4,
                 },
-                {
-                    position: 3,
-                    text: '4',
-                    type: 'number',
-                    value: 4
-                }
-            ])
+            })
         });
     });
     describe('evaluation', () => {

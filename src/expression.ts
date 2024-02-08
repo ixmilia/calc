@@ -67,7 +67,7 @@ export abstract class Expression {
         }
     }
 
-    static tokenize(expression: string) {
+    private static tokenize(expression: string) {
         const STATE = {
             NONE: 0,
             NUMBER: 1,
@@ -254,16 +254,21 @@ export abstract class Expression {
         return stack[0];
     }
 
-    static evaluate(expression: string): number {
+    static parse(expression: string): Expression {
         const tokens = this.tokenize(expression);
         const rpn = this.shuntToRpn(tokens);
         const expr = this.rpnToExpression(rpn);
+        return expr;
+    }
+
+    static evaluate(expression: string): number {
+        const expr = this.parse(expression);
         return expr.evaluate({});
     }
 }
 
 export class NumberExpression extends Expression {
-    constructor(private value: number) {
+    constructor(readonly value: number) {
         super();
     }
 
@@ -273,7 +278,7 @@ export class NumberExpression extends Expression {
 }
 
 export class VariableExpression extends Expression {
-    constructor(private name: string) {
+    constructor(readonly name: string) {
         super();
     }
 
@@ -288,7 +293,7 @@ export class VariableExpression extends Expression {
 }
 
 export class UnaryExpression extends Expression {
-    constructor(private operand: Expression, private operator: UnaryOperator) {
+    constructor(readonly operand: Expression, readonly operator: UnaryOperator) {
         super();
     }
 
@@ -300,7 +305,7 @@ export class UnaryExpression extends Expression {
 }
 
 export class BinaryExpression extends Expression {
-    constructor(private left: Expression, private right: Expression, private operator: BinaryOperator) {
+    constructor(readonly left: Expression, readonly right: Expression, readonly operator: BinaryOperator) {
         super();
     }
 
