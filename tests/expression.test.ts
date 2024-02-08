@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { Expression } from '../src/expression.js';
+import { Expression, NumberExpression } from '../src/expression.js';
 
 describe('expression', () => {
     describe('parsing', () => {
@@ -34,6 +34,14 @@ describe('expression', () => {
         it('applies the order of operations', () => {
             const result = Expression.evaluate('3+4*5');
             expect(result).to.equal(23);
+        });
+        it('expands built-in variables', () => {
+            const result = Expression.evaluate('pi*2');
+            expect(result).to.equal(Math.PI * 2);
+        });
+        it('expands custom variables', () => {
+            const result = Expression.evaluate('x*2', { x: new NumberExpression(3) });
+            expect(result).to.equal(6);
         });
     });
 });

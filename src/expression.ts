@@ -1,5 +1,5 @@
 import { BinaryOperator, Operators, UnaryOperator } from "./operator.js";
-import { NumberToken, OperatorToken, Token } from "./token.js";
+import { IdentifierToken, NumberToken, OperatorToken, Token } from "./token.js";
 
 export abstract class Expression {
     abstract evaluate(variables: { [key: string]: Expression }): number;
@@ -36,6 +36,17 @@ export abstract class Expression {
 
     private static isNumberStart(c: string) {
         return this.isDigit(c) || c === '.';
+    }
+
+    private static isIdentStart(c: string) {
+        return c.length === 1
+            && (c >= 'a' && c <= 'z' ||
+                c >= 'A' && c <= 'Z' ||
+                c === '_');
+    }
+
+    private static isIdentContinue(c: string) {
+        return this.isIdentStart(c) || this.isDigit(c);
     }
 
     private static associativity(o: string): 'left' | 'right' {
@@ -84,6 +95,10 @@ export abstract class Expression {
 
         function finishToken(position: number, kind: 'number' | 'identifier') {
             switch (kind) {
+                case 'identifier':
+                    minusIsUnary = false;
+                    tokens.push(new IdentifierToken(current, position));
+                    break;
                 case 'number':
                     minusIsUnary = false;
                     tokens.push(new NumberToken(current, position, parseFloat(current)));
@@ -113,6 +128,10 @@ export abstract class Expression {
                         seenDecimal = c === '.';
                         seenE = false;
                         seenSign = false;
+                    } else if (this.isIdentStart(c)) {
+                        current = c;
+                        start = i;
+                        state = STATE.IDENTIFIER;
                     } else {
                         throw new Error(`Unexpected character ${c} at position ${i}`);
                     }
@@ -152,6 +171,28 @@ export abstract class Expression {
                         state = STATE.NONE;
                     }
                     break;
+                case STATE.IDENTIFIER:
+                    if (this.isIdentContinue(c)) {
+                        current += c;
+                    } else if (this.isWhitespace(c)) {
+                        finishToken(start, 'identifier');
+                        state = STATE.NONE;
+                    } else if (this.isOperator(c)) {
+                        finishToken(start, 'identifier');
+                        if (c == '-' && minusIsUnary) {
+                            tokens.push(new OperatorToken('~', i, this.associativity('~'), this.precedence('~')));
+                        } else {
+                            tokens.push(new OperatorToken(c, i, this.associativity(c), this.precedence(c)));
+                            if (this.isInfixOperator(c)) {
+                                minusIsUnary = true;
+                            }
+                        }
+
+                        state = STATE.NONE;
+                    } else {
+                        throw new Error(`Unexpected identifier character ${c} at position ${i}`);
+                    }
+                    break;
                 default:
                     throw new Error(`Unexpected state ${state}`);
             }
@@ -167,6 +208,9 @@ export abstract class Expression {
         const opStack: OperatorToken[] = [];
         for (const token of tokens) {
             switch (token.type) {
+                case 'identifier':
+                    outputQueue.push(token);
+                    break;
                 case 'number':
                     outputQueue.push(token);
                     break;
@@ -220,6 +264,9 @@ export abstract class Expression {
         const stack: Expression[] = [];
         for (const token of tokens) {
             switch (token.type) {
+                case 'identifier':
+                    stack.push(new VariableExpression((<IdentifierToken>token).text));
+                    break;
                 case 'number':
                     stack.push(new NumberExpression((<NumberToken>token).value));
                     break;
@@ -254,6 +301,13 @@ export abstract class Expression {
         return stack[0];
     }
 
+    private static get defaultVariables(): { [key: string]: Expression } {
+        return {
+            'pi': new NumberExpression(Math.PI),
+            'e': new NumberExpression(Math.E)
+        };
+    };
+
     static parse(expression: string): Expression {
         const tokens = this.tokenize(expression);
         const rpn = this.shuntToRpn(tokens);
@@ -261,9 +315,11 @@ export abstract class Expression {
         return expr;
     }
 
-    static evaluate(expression: string): number {
+    static evaluate(expression: string, variables?: { [key: string]: Expression }): number {
         const expr = this.parse(expression);
-        return expr.evaluate({});
+        const userVariables = variables ?? {};
+        const combinedVariables = { ...this.defaultVariables, ...userVariables };
+        return expr.evaluate(combinedVariables);
     }
 }
 
