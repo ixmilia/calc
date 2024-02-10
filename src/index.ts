@@ -12,7 +12,13 @@ function main() {
         }
     });
     evalButton.addEventListener('click', () => {
-        const result = Expression.evaluate(input.value);
+        let result: string;
+        try {
+            const numericResult = Expression.evaluate(input.value);
+            result = numericResult.toString();
+        } catch (e) {
+            result = (<any>e).toString();
+        }
         results.textContent += `${input.value}\n\t${result}\n`;
         results.scrollTop = results.scrollHeight;
         input.value = '';
