@@ -42,7 +42,18 @@ export class BinaryOperator extends Operator {
 
 export class Operators {
     static readonly NegateOperator = new UnaryOperator('~', operand => -operand);
-    static readonly FactorialOperator = new UnaryOperator('!', _operand => 0); // TODO
+    static readonly FactorialOperator = new UnaryOperator('!', operand => {
+        if (operand < 0) {
+            return Number.NEGATIVE_INFINITY;
+        }
+
+        let result = 1;
+        for (let i = operand; i > 1; i--) {
+            result *= i;
+        }
+
+        return result;
+    });
     static readonly AddOperator = new BinaryOperator('+', (left, right) => left + right);
     static readonly SubtractOperator = new BinaryOperator('-', (left, right) => left - right);
     static readonly MultiplyOperator = new BinaryOperator('*', (left, right) => left * right);

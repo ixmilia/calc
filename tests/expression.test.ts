@@ -47,5 +47,9 @@ describe('expression', () => {
             const result = Expression.evaluate('(3+4)*(2+3)');
             expect(result).to.equal(35);
         });
+        it.only('computes factorials', () => {
+            const result = Expression.evaluate('5!');
+            expect(result).to.equal(120);
+        });
     });
 });
