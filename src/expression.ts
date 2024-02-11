@@ -1,5 +1,5 @@
 import { BinaryOperator, Operators, UnaryOperator } from "./operator.js";
-import { IdentifierToken, NumberToken, OperatorToken, Token } from "./token.js";
+import { IdentifierToken, NumberToken, OperatorToken, PunctuationToken, Token } from "./token.js";
 
 export abstract class Expression {
     abstract evaluate(variables: { [key: string]: Expression }): number;
@@ -47,6 +47,17 @@ export abstract class Expression {
 
     private static isIdentContinue(c: string) {
         return this.isIdentStart(c) || this.isDigit(c);
+    }
+
+    private static isPunctuation(c: string) {
+        switch (c) {
+            case '(':
+            case ')':
+            case ',':
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static associativity(o: string): 'left' | 'right' {
@@ -121,6 +132,9 @@ export abstract class Expression {
                                 minusIsUnary = true;
                             }
                         }
+                    } else if (this.isPunctuation(c)) {
+                        tokens.push(new PunctuationToken(c, i));
+                        minusIsUnary = c != ')';
                     } else if (this.isNumberStart(c)) {
                         current = c;
                         start = i;
@@ -142,6 +156,11 @@ export abstract class Expression {
                         seenSign = seenE; // if we've passed 'e' then '+' and '-' are no longer allowed after digits
                     } else if (this.isWhitespace(c)) {
                         finishToken(start, 'number');
+                        state = STATE.NONE;
+                    } else if (this.isPunctuation(c)) {
+                        finishToken(start, 'number');
+                        tokens.push(new PunctuationToken(c, i));
+                        minusIsUnary = c != ')';
                         state = STATE.NONE;
                     } else if (c === '.') {
                         if (!seenDecimal && !seenE) {
@@ -189,6 +208,11 @@ export abstract class Expression {
                         }
 
                         state = STATE.NONE;
+                    } else if (this.isPunctuation(c)) {
+                        finishToken(start, 'identifier');
+                        tokens.push(new PunctuationToken(c, i));
+                        minusIsUnary = c != ')';
+                        state = STATE.NONE;
                     } else {
                         throw new Error(`Unexpected identifier character ${c} at position ${i}`);
                     }
@@ -198,15 +222,19 @@ export abstract class Expression {
             }
         }
 
-        finishToken(expression.length - 1, state === STATE.NUMBER ? 'number' : 'identifier');
+        if (state !== STATE.NONE) {
+            finishToken(expression.length - 1, state === STATE.NUMBER ? 'number' : 'identifier');
+        }
+
         return tokens;
     }
 
     private static shuntToRpn(tokens: Token[]): Token[] {
         const argCountStack = [];
         const outputQueue: Token[] = [];
-        const opStack: OperatorToken[] = [];
-        for (const token of tokens) {
+        const opStack: Token[] = [];
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
             switch (token.type) {
                 case 'identifier':
                     outputQueue.push(token);
@@ -218,11 +246,45 @@ export abstract class Expression {
                     const opToken = <OperatorToken>token;
                     const opAssoc = opToken.associativity;
                     while (opStack.length > 0 && opStack[opStack.length - 1].type === 'operator' &&
-                        ((opAssoc === 'left' && opToken.precedence <= opStack[opStack.length - 1].precedence)
-                            || opToken.precedence < opStack[opStack.length - 1].precedence)) {
+                        ((opAssoc === 'left' && opToken.precedence <= (<OperatorToken>opStack[opStack.length - 1]).precedence)
+                            || opToken.precedence < (<OperatorToken>opStack[opStack.length - 1]).precedence)) {
                         outputQueue.push(opStack.pop()!);
                     }
                     opStack.push(opToken);
+                    break;
+                case 'punctuation':
+                    const puncToken = <PunctuationToken>token;
+                    switch (puncToken.symbol) {
+                        case '(':
+                            // if previous is identifier
+                            if (i >= 1 && tokens[i - 1].type === 'identifier') {
+                                throw new Error('Function expressions not yet implemented');
+                            } else {
+                                opStack.push(puncToken);
+                            }
+
+                            break;
+                        case ')':
+                            while (true) {
+                                if (opStack.length === 0) {
+                                    throw new Error('Mismatched parentheses');
+                                }
+
+                                const op = opStack.pop()!;
+                                if (op.type === 'operator') {
+                                    outputQueue.push(op);
+                                } else if (op.type === 'function') {
+                                    throw new Error('Function arguments not yet implemented');
+                                } else if (op.type === 'punctuation' && (<PunctuationToken>op).symbol === '(') {
+                                    break;
+                                }
+                            }
+                            break;
+                        case ',':
+                            throw new Error('Function arguments not yet implemented');
+                        default:
+                            throw new Error(`Unexpected punctuation ${puncToken.symbol}`);
+                    }
                     break;
                 default:
                     throw new Error(`Unexpected token ${token.text}`);

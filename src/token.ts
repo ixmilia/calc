@@ -20,3 +20,9 @@ export class OperatorToken extends Token {
         super('operator', value, position);
     }
 }
+
+export class PunctuationToken extends Token {
+    constructor(public readonly symbol: string, position: number) {
+        super('punctuation', symbol, position);
+    }
+}

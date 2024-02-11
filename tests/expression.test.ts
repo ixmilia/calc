@@ -43,5 +43,9 @@ describe('expression', () => {
             const result = Expression.evaluate('x*2', { x: new NumberExpression(3) });
             expect(result).to.equal(6);
         });
+        it('honors parentheses', () => {
+            const result = Expression.evaluate('(3+4)*(2+3)');
+            expect(result).to.equal(35);
+        });
     });
 });
