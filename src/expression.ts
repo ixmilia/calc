@@ -347,7 +347,7 @@ export abstract class Expression {
                         functionArgs.push(stack.pop()!);
                     }
 
-                    stack.push(new FunctionCallExpression(func, functionArgs));
+                    stack.push(new FunctionCallExpression(func, functionArgs.reverse()));
                     break;
                 case 'identifier':
                     stack.push(new VariableExpression((<IdentifierToken>token).text));
@@ -395,32 +395,44 @@ export abstract class Expression {
 
     protected static get defaultFunctions(): { [key: string]: FunctionDefinition } {
         return {
-            "cos": new FunctionDefinition(1, 1, args => {
-                const result = Math.cos(args[0]);
+            "cos": new FunctionDefinition(1, 1, (args, variables) => {
+                const result = Math.cos(args[0].evaluate(variables));
                 return result;
             }),
-            "ln": new FunctionDefinition(1, 1, args => {
-                const result = Math.log(args[0]);
+            "ln": new FunctionDefinition(1, 1, (args, variables) => {
+                const result = Math.log(args[0].evaluate(variables));
                 return result;
             }),
-            "log": new FunctionDefinition(2, 2, args => {
-                const result = Math.log(args[0]) / Math.log(args[1]);
+            "log": new FunctionDefinition(2, 2, (args, variables) => {
+                const result = Math.log(args[0].evaluate(variables)) / Math.log(args[1].evaluate(variables));
                 return result;
             }),
-            "max": new FunctionDefinition(2, 2, args => {
-                const result = Math.max(...args);
+            "max": new FunctionDefinition(2, 2, (args, variables) => {
+                const result = Math.max(...args.map(a => a.evaluate(variables)));
                 return result;
             }),
-            "min": new FunctionDefinition(2, 2, args => {
-                const result = Math.min(...args);
+            "min": new FunctionDefinition(2, 2, (args, variables) => {
+                const result = Math.min(...args.map(a => a.evaluate(variables)));
                 return result;
             }),
-            "sin": new FunctionDefinition(1, 1, args => {
-                const result = Math.sin(args[0]);
+            "sin": new FunctionDefinition(1, 1, (args, variables) => {
+                const result = Math.sin(args[0].evaluate(variables));
                 return result;
             }),
-            "tan": new FunctionDefinition(1, 1, args => {
-                const result = Math.tan(args[0]);
+            "sum": new FunctionDefinition(4, 4, (args, variables) => {
+                const expr = args[0];
+                const ident = <VariableExpression>args[1];
+                const start = args[2].evaluate(variables);
+                const end = args[3].evaluate(variables);
+                let sum = 0;
+                for (let i = start; i <= end; i++) {
+                    sum += expr.evaluate({ ...variables, [ident.name]: new NumberExpression(i) })
+                }
+
+                return sum;
+            }),
+            "tan": new FunctionDefinition(1, 1, (args, variables) => {
+                const result = Math.tan(args[0].evaluate(variables));
                 return result;
             }),
         };
@@ -508,14 +520,13 @@ export class FunctionCallExpression extends Expression {
     }
 
     evaluate(variables: { [key: string]: Expression }): number {
-        const evaluatedArgs = this.args.map(a => a.evaluate(variables));
-        const result = this._definition.handler(evaluatedArgs);
+        const result = this._definition.handler(this.args, variables);
         return result;
     }
 }
 
 export class FunctionDefinition {
-    constructor(readonly minimumArgumentCount: number, readonly maximumArgumentCount: number, readonly handler: (args: number[]) => number) {
+    constructor(readonly minimumArgumentCount: number, readonly maximumArgumentCount: number, readonly handler: (args: Expression[], variables: { [key: string]: Expression }) => number) {
 
     }
 }

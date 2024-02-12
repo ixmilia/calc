@@ -55,5 +55,9 @@ describe('expression', () => {
             const result = Expression.evaluate('min(3, 5)');
             expect(result).to.equal(3);
         });
+        it('can apply functions with expression arguments', () => {
+            const result = Expression.evaluate('sum(x^2,x,1,3)');
+            expect(result).to.equal(14);
+        });
     });
 });
