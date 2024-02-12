@@ -1,5 +1,5 @@
 import { BinaryOperator, Operators, UnaryOperator } from "./operator.js";
-import { IdentifierToken, NumberToken, OperatorToken, PunctuationToken, Token } from "./token.js";
+import { FunctionCallToken, IdentifierToken, NumberToken, OperatorToken, PunctuationToken, Token } from "./token.js";
 
 export abstract class Expression {
     abstract evaluate(variables: { [key: string]: Expression }): number;
@@ -230,7 +230,7 @@ export abstract class Expression {
     }
 
     private static shuntToRpn(tokens: Token[]): Token[] {
-        const argCountStack = [];
+        const argCountStack: number[] = [];
         const outputQueue: Token[] = [];
         const opStack: Token[] = [];
         for (let i = 0; i < tokens.length; i++) {
@@ -258,7 +258,9 @@ export abstract class Expression {
                         case '(':
                             // if previous is identifier
                             if (i >= 1 && tokens[i - 1].type === 'identifier') {
-                                throw new Error('Function expressions not yet implemented');
+                                const functionIdentifier = <IdentifierToken>outputQueue.pop()!;
+                                opStack.push(functionIdentifier);
+                                argCountStack.push(0);
                             } else {
                                 opStack.push(puncToken);
                             }
@@ -273,15 +275,27 @@ export abstract class Expression {
                                 const op = opStack.pop()!;
                                 if (op.type === 'operator') {
                                     outputQueue.push(op);
-                                } else if (op.type === 'function') {
-                                    throw new Error('Function arguments not yet implemented');
+                                } else if (op.type === 'identifier') {
+                                    const func = <IdentifierToken>op;
+                                    let argCount = argCountStack.pop()! + 1;
+                                    if (i >= 2 && tokens[i - 1].type === 'punctuation' && (<PunctuationToken>tokens[i - 1]).symbol === '(' && tokens[i - 2].type === 'identifier') {
+                                        argCount = 0;
+                                    }
+
+                                    outputQueue.push(new FunctionCallToken(func, argCount));
+                                    break;
                                 } else if (op.type === 'punctuation' && (<PunctuationToken>op).symbol === '(') {
                                     break;
                                 }
                             }
                             break;
                         case ',':
-                            throw new Error('Function arguments not yet implemented');
+                            while (opStack[opStack.length - 1].type !== 'identifier') {
+                                outputQueue.push(opStack.pop()!);
+                            }
+
+                            argCountStack.push(argCountStack.pop()! + 1);
+                            break;
                         default:
                             throw new Error(`Unexpected punctuation ${puncToken.symbol}`);
                     }
@@ -326,6 +340,15 @@ export abstract class Expression {
         const stack: Expression[] = [];
         for (const token of tokens) {
             switch (token.type) {
+                case 'function':
+                    const func = <FunctionCallToken>token;
+                    const functionArgs: Expression[] = [];
+                    for (let i = 0; i < func.argumentCount; i++) {
+                        functionArgs.push(stack.pop()!);
+                    }
+
+                    stack.push(new FunctionCallExpression(func, functionArgs));
+                    break;
                 case 'identifier':
                     stack.push(new VariableExpression((<IdentifierToken>token).text));
                     break;
@@ -336,16 +359,16 @@ export abstract class Expression {
                     const opToken = <OperatorToken>token;
                     const requiredOperands = this.operandCount(opToken.text);
                     // TODO: ensure stack
-                    const args: Expression[] = [];
+                    const expressionArgs: Expression[] = [];
                     for (let i = 0; i < requiredOperands; i++) {
-                        args.push(stack.pop()!);
+                        expressionArgs.push(stack.pop()!);
                     }
                     switch (requiredOperands) {
                         case 1:
-                            stack.push(new UnaryExpression(args[0], <UnaryOperator>Operators.operatorFromSymbol(opToken.text)));
+                            stack.push(new UnaryExpression(expressionArgs[0], <UnaryOperator>Operators.operatorFromSymbol(opToken.text)));
                             break;
                         case 2:
-                            stack.push(new BinaryExpression(args[1], args[0], <BinaryOperator>Operators.operatorFromSymbol(opToken.text)));
+                            stack.push(new BinaryExpression(expressionArgs[1], expressionArgs[0], <BinaryOperator>Operators.operatorFromSymbol(opToken.text)));
                             break;
                         default:
                             throw new Error(`Unexpected operand count ${requiredOperands}`);
@@ -369,6 +392,39 @@ export abstract class Expression {
             'e': new NumberExpression(Math.E)
         };
     };
+
+    protected static get defaultFunctions(): { [key: string]: FunctionDefinition } {
+        return {
+            "cos": new FunctionDefinition(1, 1, args => {
+                const result = Math.cos(args[0]);
+                return result;
+            }),
+            "ln": new FunctionDefinition(1, 1, args => {
+                const result = Math.log(args[0]);
+                return result;
+            }),
+            "log": new FunctionDefinition(2, 2, args => {
+                const result = Math.log(args[0]) / Math.log(args[1]);
+                return result;
+            }),
+            "max": new FunctionDefinition(2, 2, args => {
+                const result = Math.max(...args);
+                return result;
+            }),
+            "min": new FunctionDefinition(2, 2, args => {
+                const result = Math.min(...args);
+                return result;
+            }),
+            "sin": new FunctionDefinition(1, 1, args => {
+                const result = Math.sin(args[0]);
+                return result;
+            }),
+            "tan": new FunctionDefinition(1, 1, args => {
+                const result = Math.tan(args[0]);
+                return result;
+            }),
+        };
+    }
 
     static parse(expression: string): Expression {
         const tokens = this.tokenize(expression);
@@ -432,5 +488,34 @@ export class BinaryExpression extends Expression {
         const rightValue = this.right.evaluate(variables);
         const result = this.operator.evaluate([leftValue, rightValue]);
         return result;
+    }
+}
+
+export class FunctionCallExpression extends Expression {
+    private _definition: FunctionDefinition;
+
+    constructor(readonly func: FunctionCallToken, readonly args: Expression[]) {
+        super();
+        const functionDefinition = Expression.defaultFunctions[func.identifier.text];
+        if (!functionDefinition) {
+            throw new Error(`function '${func.identifier.text}' not found`);
+        }
+
+        this._definition = functionDefinition;
+        if (args.length < this._definition.minimumArgumentCount || args.length > this._definition.maximumArgumentCount) {
+            throw new Error(`function '${func.identifier.text}' requires between ${this._definition.minimumArgumentCount} and ${this._definition.maximumArgumentCount} arguments`);
+        }
+    }
+
+    evaluate(variables: { [key: string]: Expression }): number {
+        const evaluatedArgs = this.args.map(a => a.evaluate(variables));
+        const result = this._definition.handler(evaluatedArgs);
+        return result;
+    }
+}
+
+export class FunctionDefinition {
+    constructor(readonly minimumArgumentCount: number, readonly maximumArgumentCount: number, readonly handler: (args: number[]) => number) {
+
     }
 }

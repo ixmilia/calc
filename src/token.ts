@@ -26,3 +26,9 @@ export class PunctuationToken extends Token {
         super('punctuation', symbol, position);
     }
 }
+
+export class FunctionCallToken extends Token {
+    constructor(public readonly identifier: IdentifierToken, public readonly argumentCount: number) {
+        super('function', identifier.text, identifier.position)
+    }
+}
