@@ -71,5 +71,9 @@ describe('expression', () => {
             const result = evaluateAsNumber('sum(x^2,x,1,3)');
             expect(result).to.equal(14);
         });
+        it('computes simple differentials', () => {
+            const result = Expression.evaluate('diff(x^3+2*x, x)');
+            expect(result.toString()).to.equal('((3*(x^2))+2)');
+        });
     });
 });

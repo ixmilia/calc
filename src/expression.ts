@@ -411,11 +411,63 @@ export abstract class Expression {
         }
     }
 
+    private static diff(expression: Expression, variable: string): Expression {
+        switch (expression.type) {
+            case 'number':
+                return new NumberExpression(0);
+            case 'variable':
+                const variableExpression = <VariableExpression>expression;
+                if (variableExpression.name === variable) {
+                    return new NumberExpression(1);
+                }
+
+                return expression;
+            case 'binary':
+                const binaryExpression = <BinaryExpression>expression;
+                switch (binaryExpression.operator.symbol) {
+                    case '+':
+                    case '-':
+                        return new BinaryExpression(this.diff(binaryExpression.left, variable), this.diff(binaryExpression.right, variable), binaryExpression.operator);
+                    case '*':
+                        return new BinaryExpression(
+                            new BinaryExpression(binaryExpression.left, this.diff(binaryExpression.right, variable), Operators.MultiplyOperator),
+                            new BinaryExpression(binaryExpression.right, this.diff(binaryExpression.left, variable), Operators.MultiplyOperator),
+                            Operators.AddOperator);
+                    case '/':
+                        return new BinaryExpression(
+                            new BinaryExpression(
+                                new BinaryExpression(binaryExpression.right, this.diff(binaryExpression.left, variable), Operators.MultiplyOperator),
+                                new BinaryExpression(binaryExpression.left, this.diff(binaryExpression.right, variable), Operators.MultiplyOperator),
+                                Operators.SubtractOperator),
+                            new BinaryExpression(binaryExpression.right, binaryExpression.right, Operators.MultiplyOperator),
+                            Operators.DivideOperator);
+                    case '^':
+                        return new BinaryExpression(
+                            binaryExpression.right,
+                            new BinaryExpression(
+                                binaryExpression.left,
+                                new BinaryExpression(binaryExpression.right, new NumberExpression(1), Operators.SubtractOperator),
+                                Operators.ExponentiateOperator),
+                            Operators.MultiplyOperator);
+                    default:
+                        throw new Error(`Unknown operator ${binaryExpression.operator}`);
+                }
+            default:
+                throw new Error(`Unknown expression type ${expression.type}`);
+        }
+    }
+
     protected static get defaultFunctions(): { [key: string]: FunctionDefinition } {
         return {
             "cos": new FunctionDefinition(1, 1, Expression.wrapNumeric("cos", Math.cos)),
+            "diff": new FunctionDefinition(2, 2, (args, variables) => {
+                const expr = args[0];
+                const ident = <VariableExpression>args[1];
+                const expressionResult = this.diff(expr, ident.name);
+                return expressionResult.evaluate(variables);
+            }),
             "ln": new FunctionDefinition(1, 1, Expression.wrapNumeric("ln", Math.log)),
-            "log": new FunctionDefinition(2, 2, Expression.wrapNumeric("log", (...args: number[]) => Math.log(args[0]) / Math.log(args[1]))),
+            "log": new FunctionDefinition(2, 2, Expression.wrapNumeric("log", (...args: number[]) => Math.log(args[1]) / Math.log(args[0]))),
             "max": new FunctionDefinition(2, 2, Expression.wrapNumeric("max", Math.max)),
             "min": new FunctionDefinition(2, 2, Expression.wrapNumeric("min", Math.min)),
             "sin": new FunctionDefinition(1, 1, Expression.wrapNumeric("sin", Math.sin)),
