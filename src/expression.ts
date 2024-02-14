@@ -2,7 +2,11 @@ import { BinaryOperator, Operators, UnaryOperator } from "./operator.js";
 import { FunctionCallToken, IdentifierToken, NumberToken, OperatorToken, PunctuationToken, Token } from "./token.js";
 
 export abstract class Expression {
-    abstract evaluate(variables: { [key: string]: Expression }): number;
+    constructor(readonly type: string) {
+    }
+
+    abstract evaluate(variables: { [key: string]: Expression }): Expression;
+    abstract toString(): string;
 
     private static isWhitespace(c: string) {
         return c === ' ' || c === '\t' || c === '\n' || c === '\r';
@@ -393,48 +397,47 @@ export abstract class Expression {
         };
     };
 
+    private static wrapNumeric(name: string, fn: (...args: number[]) => number): (args: Expression[], variables: { [key: string]: Expression }) => Expression {
+        return (args, variables) => {
+            const evaluatedArgs = args.map(a => a.evaluate(variables));
+            if (evaluatedArgs.every(e => this.isNumber(e))) {
+                const numericArgs = evaluatedArgs.map(e => (<NumberExpression>e).value);
+                const numericResult = fn(...numericArgs);
+                const expressionResult = new NumberExpression(numericResult);
+                return expressionResult;
+            }
+
+            return new FunctionCallExpression(new FunctionCallToken(new IdentifierToken(name, -1), evaluatedArgs.length), evaluatedArgs);
+        }
+    }
+
     protected static get defaultFunctions(): { [key: string]: FunctionDefinition } {
         return {
-            "cos": new FunctionDefinition(1, 1, (args, variables) => {
-                const result = Math.cos(args[0].evaluate(variables));
-                return result;
-            }),
-            "ln": new FunctionDefinition(1, 1, (args, variables) => {
-                const result = Math.log(args[0].evaluate(variables));
-                return result;
-            }),
-            "log": new FunctionDefinition(2, 2, (args, variables) => {
-                const result = Math.log(args[0].evaluate(variables)) / Math.log(args[1].evaluate(variables));
-                return result;
-            }),
-            "max": new FunctionDefinition(2, 2, (args, variables) => {
-                const result = Math.max(...args.map(a => a.evaluate(variables)));
-                return result;
-            }),
-            "min": new FunctionDefinition(2, 2, (args, variables) => {
-                const result = Math.min(...args.map(a => a.evaluate(variables)));
-                return result;
-            }),
-            "sin": new FunctionDefinition(1, 1, (args, variables) => {
-                const result = Math.sin(args[0].evaluate(variables));
-                return result;
-            }),
+            "cos": new FunctionDefinition(1, 1, Expression.wrapNumeric("cos", Math.cos)),
+            "ln": new FunctionDefinition(1, 1, Expression.wrapNumeric("ln", Math.log)),
+            "log": new FunctionDefinition(2, 2, Expression.wrapNumeric("log", (...args: number[]) => Math.log(args[0]) / Math.log(args[1]))),
+            "max": new FunctionDefinition(2, 2, Expression.wrapNumeric("max", Math.max)),
+            "min": new FunctionDefinition(2, 2, Expression.wrapNumeric("min", Math.min)),
+            "sin": new FunctionDefinition(1, 1, Expression.wrapNumeric("sin", Math.sin)),
             "sum": new FunctionDefinition(4, 4, (args, variables) => {
                 const expr = args[0];
                 const ident = <VariableExpression>args[1];
                 const start = args[2].evaluate(variables);
                 const end = args[3].evaluate(variables);
-                let sum = 0;
-                for (let i = start; i <= end; i++) {
-                    sum += expr.evaluate({ ...variables, [ident.name]: new NumberExpression(i) })
+
+                if (!Expression.isNumber(start) || !Expression.isNumber(end)) {
+                    throw new Error("Sum bounds must be numbers");
                 }
 
-                return sum;
-            }),
-            "tan": new FunctionDefinition(1, 1, (args, variables) => {
-                const result = Math.tan(args[0].evaluate(variables));
+                let result: Expression = new NumberExpression(0);
+                for (let i = start.value; i <= end.value; i++) {
+                    const next = expr.evaluate({ ...variables, [ident.name]: new NumberExpression(i) });
+                    result = new BinaryExpression(result, next, Operators.AddOperator).evaluate(variables);
+                }
+
                 return result;
             }),
+            "tan": new FunctionDefinition(1, 1, Expression.wrapNumeric("tan", Math.tan)),
         };
     }
 
@@ -445,61 +448,97 @@ export abstract class Expression {
         return expr;
     }
 
-    static evaluate(expression: string, variables?: { [key: string]: Expression }): number {
+    static evaluate(expression: string, variables?: { [key: string]: Expression }): Expression {
         const expr = this.parse(expression);
         const userVariables = variables ?? {};
         const combinedVariables = { ...this.defaultVariables, ...userVariables };
         return expr.evaluate(combinedVariables);
     }
+
+    static isNumber(expression: Expression): expression is NumberExpression {
+        return expression.type === 'number';
+    }
+
+    static isVariable(expression: Expression): expression is VariableExpression {
+        return expression.type === 'variable';
+    }
+
+    static isUnary(expression: Expression): expression is UnaryExpression {
+        return expression.type === 'unary'
+    }
+
+    static isBinary(expression: Expression): expression is BinaryExpression {
+        return expression.type === 'binary';
+    }
+
+    static isFunctionCall(expression: Expression): expression is FunctionCallExpression {
+        return expression.type === 'functionCall';
+    }
 }
 
 export class NumberExpression extends Expression {
     constructor(readonly value: number) {
-        super();
+        super('number');
     }
 
-    evaluate(_variables: { [key: string]: Expression }) {
-        return this.value;
+    evaluate(_variables: { [key: string]: Expression }): Expression {
+        return this;
+    }
+
+    toString(): string {
+        return this.value.toString();
     }
 }
 
 export class VariableExpression extends Expression {
     constructor(readonly name: string) {
-        super();
+        super('variable');
     }
 
-    evaluate(variables: { [key: string]: Expression; }): number {
+    evaluate(variables: { [key: string]: Expression; }): Expression {
         const expression = variables[this.name];
         if (!expression) {
-            throw new Error(`Variable ${this.name} is not defined`);
+            return this;
         }
 
         return expression.evaluate(variables);
+    }
+
+    toString(): string {
+        return this.name;
     }
 }
 
 export class UnaryExpression extends Expression {
     constructor(readonly operand: Expression, readonly operator: UnaryOperator) {
-        super();
+        super('unary');
     }
 
-    evaluate(variables: { [key: string]: Expression }): number {
+    evaluate(variables: { [key: string]: Expression }): Expression {
         const operandValue = this.operand.evaluate(variables);
-        const result = this.operator.evaluate([operandValue]);
-        return result;
+        return this.operator.evaluate([operandValue], variables);
+    }
+
+    toString(): string {
+        // TODO: prefix vs postfix
+        return `${this.operator.symbol}${this.operand.toString()}`;
     }
 }
 
 export class BinaryExpression extends Expression {
     constructor(readonly left: Expression, readonly right: Expression, readonly operator: BinaryOperator) {
-        super();
+        super('binary');
     }
 
-    evaluate(variables: { [key: string]: Expression }): number {
+    evaluate(variables: { [key: string]: Expression }): Expression {
         const leftValue = this.left.evaluate(variables);
         const rightValue = this.right.evaluate(variables);
-        const result = this.operator.evaluate([leftValue, rightValue]);
-        return result;
+
+        return this.operator.evaluate([leftValue, rightValue], variables);
+    }
+
+    toString(): string {
+        return `(${this.left.toString()}${this.operator.symbol}${this.right.toString()})`;
     }
 }
 
@@ -507,7 +546,7 @@ export class FunctionCallExpression extends Expression {
     private _definition: FunctionDefinition;
 
     constructor(readonly func: FunctionCallToken, readonly args: Expression[]) {
-        super();
+        super('functionCall');
         const functionDefinition = Expression.defaultFunctions[func.identifier.text];
         if (!functionDefinition) {
             throw new Error(`function '${func.identifier.text}' not found`);
@@ -519,14 +558,18 @@ export class FunctionCallExpression extends Expression {
         }
     }
 
-    evaluate(variables: { [key: string]: Expression }): number {
+    evaluate(variables: { [key: string]: Expression }): Expression {
         const result = this._definition.handler(this.args, variables);
         return result;
+    }
+
+    toString(): string {
+        return `${this.func.text}(${this.args.join(',')})`;
     }
 }
 
 export class FunctionDefinition {
-    constructor(readonly minimumArgumentCount: number, readonly maximumArgumentCount: number, readonly handler: (args: Expression[], variables: { [key: string]: Expression }) => number) {
+    constructor(readonly minimumArgumentCount: number, readonly maximumArgumentCount: number, readonly handler: (args: Expression[], variables: { [key: string]: Expression }) => Expression) {
 
     }
 }
