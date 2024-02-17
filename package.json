@@ -11,6 +11,7 @@
     "compile": "npm run compile:tsc && npm run compile:rollup && npm run compile:copyres",
     "debug": "npm run compile:tsc && mocha out/tests/**/*.test.js --inspect",
     "build": "npm run compile",
+    "start": "npm run compile && start ./dist/index.html",
     "test:run": "mocha out/tests/**/*.test.js",
     "test": "npm run compile:tsc && npm run test:run",
     "watch": "tsc -watch -p ./"
