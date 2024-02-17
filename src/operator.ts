@@ -1,4 +1,4 @@
-import { BinaryExpression, Expression, NumberExpression } from "./expression.js";
+import { BinaryExpression, Expression, Mode, NumberExpression } from "./expression.js";
 
 export abstract class Operator {
     constructor(readonly symbol: string, readonly minimumArgumentCount: number, readonly maximumArgumentCount: number) {
@@ -11,12 +11,12 @@ export abstract class Operator {
         }
     }
 
-    evaluate(args: Expression[], variables: { [key: string]: Expression }): Expression {
+    evaluate(args: Expression[], mode: Mode, variables: { [key: string]: Expression }): Expression {
         if (args.length < this.minimumArgumentCount || args.length > this.maximumArgumentCount) {
             throw new Error(`Expected between ${this.minimumArgumentCount} and ${this.maximumArgumentCount} arguments, got ${args.length}`);
         }
 
-        const evaluatedArgs = args.map(a => a.evaluate(variables));
+        const evaluatedArgs = args.map(a => a.evaluate(mode, variables));
         if (evaluatedArgs.every(a => Expression.isNumber(a))) {
             const evaluatedNumericArgs = evaluatedArgs.map(a => (<NumberExpression>a).value);
             const numericResult = this.evaluateNumericInternal(evaluatedNumericArgs);

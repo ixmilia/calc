@@ -1,11 +1,16 @@
 import { BinaryOperator, Operators, UnaryOperator } from "./operator.js";
 import { FunctionCallToken, IdentifierToken, NumberToken, OperatorToken, PunctuationToken, Token } from "./token.js";
 
+export enum Mode {
+    Radians = 0,
+    Degrees = 1,
+};
+
 export abstract class Expression {
     constructor(readonly type: string) {
     }
 
-    abstract evaluate(variables: { [key: string]: Expression }): Expression;
+    abstract evaluate(mode: Mode, variables: { [key: string]: Expression }): Expression;
     abstract toString(): string;
 
     private static isWhitespace(c: string) {
@@ -397,9 +402,9 @@ export abstract class Expression {
         };
     };
 
-    private static wrapNumeric(name: string, fn: (...args: number[]) => number): (args: Expression[], variables: { [key: string]: Expression }) => Expression {
-        return (args, variables) => {
-            const evaluatedArgs = args.map(a => a.evaluate(variables));
+    private static wrapNumeric(name: string, fn: (...args: number[]) => number): (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression {
+        return (args, mode, variables) => {
+            const evaluatedArgs = args.map(a => a.evaluate(mode, variables));
             if (evaluatedArgs.every(e => this.isNumber(e))) {
                 const numericArgs = evaluatedArgs.map(e => (<NumberExpression>e).value);
                 const numericResult = fn(...numericArgs);
@@ -409,6 +414,44 @@ export abstract class Expression {
 
             return new FunctionCallExpression(new FunctionCallToken(new IdentifierToken(name, -1), evaluatedArgs.length), evaluatedArgs);
         }
+    }
+
+    // TODO: make these expressions
+    private static get RadiansToDegrees(): Expression {
+        return new BinaryExpression(new NumberExpression(180), new VariableExpression('pi'), Operators.DivideOperator);
+    }
+
+    private static get DegreesToRadians(): Expression {
+        return new BinaryExpression(new VariableExpression('pi'), new NumberExpression(180), Operators.DivideOperator);
+    }
+
+    private static wrapTrig(name: string, fn: (...args: number[]) => number): (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression {
+        return (args, mode, variables) => {
+            const multiplier = mode === Mode.Degrees ? Expression.DegreesToRadians : new NumberExpression(1);
+            const evaluatedArgs = args.map(a => {
+                const argExpression = new BinaryExpression(a, multiplier, Operators.MultiplyOperator);
+                const argResult = argExpression.evaluate(mode, variables);
+                return argResult;
+            });
+            if (evaluatedArgs.every(e => this.isNumber(e))) {
+                const numericArgs = evaluatedArgs.map(e => (<NumberExpression>e).value);
+                const numericResult = fn(...numericArgs);
+                const expressionResult = new NumberExpression(numericResult);
+                return expressionResult;
+            }
+
+            return new FunctionCallExpression(new FunctionCallToken(new IdentifierToken(name, -1), evaluatedArgs.length), evaluatedArgs);
+        };
+    }
+
+    private static wrapTrigArc(name: string, fn: (...args: number[]) => number): (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression {
+        return (args, mode, variables) => {
+            const multiplier = mode === Mode.Degrees ? Expression.RadiansToDegrees : new NumberExpression(1);
+            const intermediateResult = this.wrapNumeric(name, fn)(args, mode, variables);
+            const multipliedExpression = new BinaryExpression(intermediateResult, multiplier, Operators.MultiplyOperator);
+            const multipliedResult = multipliedExpression.evaluate(mode, variables);
+            return multipliedResult;
+        };
     }
 
     private static diff(expression: Expression, variable: string): Expression {
@@ -459,27 +502,27 @@ export abstract class Expression {
 
     protected static get defaultFunctions(): { [key: string]: FunctionDefinition } {
         return {
-            "acos": new FunctionDefinition(1, 1, Expression.wrapNumeric("acos", Math.acos)),
-            "asin": new FunctionDefinition(1, 1, Expression.wrapNumeric("asin", Math.asin)),
-            "atan": new FunctionDefinition(1, 1, Expression.wrapNumeric("atan", Math.atan)),
-            "atan2": new FunctionDefinition(2, 2, Expression.wrapNumeric("atan2", Math.atan2)),
-            "cos": new FunctionDefinition(1, 1, Expression.wrapNumeric("cos", Math.cos)),
-            "diff": new FunctionDefinition(2, 2, (args, variables) => {
+            "acos": new FunctionDefinition(1, 1, Expression.wrapTrigArc("acos", Math.acos)),
+            "asin": new FunctionDefinition(1, 1, Expression.wrapTrigArc("asin", Math.asin)),
+            "atan": new FunctionDefinition(1, 1, Expression.wrapTrigArc("atan", Math.atan)),
+            "atan2": new FunctionDefinition(2, 2, Expression.wrapTrigArc("atan2", Math.atan2)),
+            "cos": new FunctionDefinition(1, 1, Expression.wrapTrig("cos", Math.cos)),
+            "diff": new FunctionDefinition(2, 2, (args, mode, variables) => {
                 const expr = args[0];
                 const ident = <VariableExpression>args[1];
                 const expressionResult = this.diff(expr, ident.name);
-                return expressionResult.evaluate(variables);
+                return expressionResult.evaluate(mode, variables);
             }),
             "ln": new FunctionDefinition(1, 1, Expression.wrapNumeric("ln", Math.log)),
             "log": new FunctionDefinition(2, 2, Expression.wrapNumeric("log", (...args: number[]) => Math.log(args[1]) / Math.log(args[0]))),
             "max": new FunctionDefinition(2, 2, Expression.wrapNumeric("max", Math.max)),
             "min": new FunctionDefinition(2, 2, Expression.wrapNumeric("min", Math.min)),
-            "sin": new FunctionDefinition(1, 1, Expression.wrapNumeric("sin", Math.sin)),
-            "sum": new FunctionDefinition(4, 4, (args, variables) => {
+            "sin": new FunctionDefinition(1, 1, Expression.wrapTrig("sin", Math.sin)),
+            "sum": new FunctionDefinition(4, 4, (args, mode, variables) => {
                 const expr = args[0];
                 const ident = <VariableExpression>args[1];
-                const start = args[2].evaluate(variables);
-                const end = args[3].evaluate(variables);
+                const start = args[2].evaluate(mode, variables);
+                const end = args[3].evaluate(mode, variables);
 
                 if (!Expression.isNumber(start) || !Expression.isNumber(end)) {
                     throw new Error("Sum bounds must be numbers");
@@ -487,13 +530,13 @@ export abstract class Expression {
 
                 let result: Expression = new NumberExpression(0);
                 for (let i = start.value; i <= end.value; i++) {
-                    const next = expr.evaluate({ ...variables, [ident.name]: new NumberExpression(i) });
-                    result = new BinaryExpression(result, next, Operators.AddOperator).evaluate(variables);
+                    const next = expr.evaluate(mode, { ...variables, [ident.name]: new NumberExpression(i) });
+                    result = new BinaryExpression(result, next, Operators.AddOperator).evaluate(mode, variables);
                 }
 
                 return result;
             }),
-            "tan": new FunctionDefinition(1, 1, Expression.wrapNumeric("tan", Math.tan)),
+            "tan": new FunctionDefinition(1, 1, Expression.wrapTrig("tan", Math.tan)),
         };
     }
 
@@ -504,11 +547,12 @@ export abstract class Expression {
         return expr;
     }
 
-    static evaluate(expression: string, variables?: { [key: string]: Expression }): Expression {
+    static evaluate(expression: string, mode?: Mode, variables?: { [key: string]: Expression }): Expression {
+        const modeToUse = mode ?? Mode.Radians;
         const expr = this.parse(expression);
         const userVariables = variables ?? {};
         const combinedVariables = { ...this.defaultVariables, ...userVariables };
-        return expr.evaluate(combinedVariables);
+        return expr.evaluate(modeToUse, combinedVariables);
     }
 
     static isNumber(expression: Expression): expression is NumberExpression {
@@ -537,7 +581,7 @@ export class NumberExpression extends Expression {
         super('number');
     }
 
-    evaluate(_variables: { [key: string]: Expression }): Expression {
+    evaluate(_mode: Mode, _variables: { [key: string]: Expression }): Expression {
         return this;
     }
 
@@ -551,13 +595,13 @@ export class VariableExpression extends Expression {
         super('variable');
     }
 
-    evaluate(variables: { [key: string]: Expression; }): Expression {
+    evaluate(mode: Mode, variables: { [key: string]: Expression; }): Expression {
         const expression = variables[this.name];
         if (!expression) {
             return this;
         }
 
-        return expression.evaluate(variables);
+        return expression.evaluate(mode, variables);
     }
 
     toString(): string {
@@ -570,9 +614,9 @@ export class UnaryExpression extends Expression {
         super('unary');
     }
 
-    evaluate(variables: { [key: string]: Expression }): Expression {
-        const operandValue = this.operand.evaluate(variables);
-        return this.operator.evaluate([operandValue], variables);
+    evaluate(mode: Mode, variables: { [key: string]: Expression }): Expression {
+        const operandValue = this.operand.evaluate(mode, variables);
+        return this.operator.evaluate([operandValue], mode, variables);
     }
 
     toString(): string {
@@ -586,11 +630,11 @@ export class BinaryExpression extends Expression {
         super('binary');
     }
 
-    evaluate(variables: { [key: string]: Expression }): Expression {
-        const leftValue = this.left.evaluate(variables);
-        const rightValue = this.right.evaluate(variables);
+    evaluate(mode: Mode, variables: { [key: string]: Expression }): Expression {
+        const leftValue = this.left.evaluate(mode, variables);
+        const rightValue = this.right.evaluate(mode, variables);
 
-        return this.operator.evaluate([leftValue, rightValue], variables);
+        return this.operator.evaluate([leftValue, rightValue], mode, variables);
     }
 
     toString(): string {
@@ -614,8 +658,8 @@ export class FunctionCallExpression extends Expression {
         }
     }
 
-    evaluate(variables: { [key: string]: Expression }): Expression {
-        const result = this._definition.handler(this.args, variables);
+    evaluate(mode: Mode, variables: { [key: string]: Expression }): Expression {
+        const result = this._definition.handler(this.args, mode, variables);
         return result;
     }
 
@@ -625,7 +669,7 @@ export class FunctionCallExpression extends Expression {
 }
 
 export class FunctionDefinition {
-    constructor(readonly minimumArgumentCount: number, readonly maximumArgumentCount: number, readonly handler: (args: Expression[], variables: { [key: string]: Expression }) => Expression) {
+    constructor(readonly minimumArgumentCount: number, readonly maximumArgumentCount: number, readonly handler: (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression) {
 
     }
 }

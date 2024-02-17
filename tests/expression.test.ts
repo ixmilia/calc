@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { Expression, NumberExpression } from '../src/expression.js';
+import { Expression, Mode, NumberExpression } from '../src/expression.js';
 
 describe('expression', () => {
     describe('parsing', () => {
@@ -31,7 +31,7 @@ describe('expression', () => {
     });
     describe('evaluation', () => {
         function evaluateAsNumber(expression: string, variables?: { [key: string]: Expression }): number {
-            const result = Expression.evaluate(expression, variables);
+            const result = Expression.evaluate(expression, Mode.Radians, variables);
             if (result instanceof NumberExpression) {
                 return result.value;
             }
@@ -74,6 +74,26 @@ describe('expression', () => {
         it('computes simple differentials', () => {
             const result = Expression.evaluate('diff(x^3+2*x, x)');
             expect(result.toString()).to.equal('((3*(x^2))+2)');
+        });
+        it('computes trig functions in the appropriate mode: degrees', () => {
+            const result = Expression.evaluate('sin(90)', Mode.Degrees);
+            expect(Expression.isNumber(result)).to.be.true;
+            expect((<NumberExpression>result).value).to.be.closeTo(1, 0.0001);
+        });
+        it('computes trig functions in the appropriate mode: radians', () => {
+            const result = Expression.evaluate('sin(pi/2)', Mode.Radians);
+            expect(Expression.isNumber(result)).to.be.true;
+            expect((<NumberExpression>result).value).to.be.closeTo(1, 0.0001);
+        });
+        it('computes arc trig functions in the appropriate mode: degrees', () => {
+            const result = Expression.evaluate('asin(1)', Mode.Degrees);
+            expect(Expression.isNumber(result)).to.be.true;
+            expect((<NumberExpression>result).value).to.be.closeTo(90, 0.0001);
+        });
+        it('computes arc trig functions in the appropriate mode: radians', () => {
+            const result = Expression.evaluate('asin(1)', Mode.Radians);
+            expect(Expression.isNumber(result)).to.be.true;
+            expect((<NumberExpression>result).value).to.be.closeTo(Math.PI / 2, 0.0001);
         });
     });
 });

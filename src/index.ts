@@ -1,9 +1,13 @@
-import { Expression } from "./expression.js";
+import { Expression, Mode } from "./expression.js";
 
 function main() {
     const results = <HTMLTextAreaElement>document.getElementById('results')!;
     const input = <HTMLInputElement>document.getElementById('input')!;
     const evalButton = <HTMLButtonElement>document.getElementById('eval')!;
+    const modeRadians = <HTMLInputElement>document.getElementById('mode-radians')!;
+    const _modeDegrees = <HTMLInputElement>document.getElementById('mode-degrees')!;
+
+    modeRadians.checked = true;
 
     input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -12,9 +16,10 @@ function main() {
         }
     });
     evalButton.addEventListener('click', () => {
+        const mode = modeRadians.checked ? Mode.Radians : Mode.Degrees;
         let result: string;
         try {
-            const numericResult = Expression.evaluate(input.value);
+            const numericResult = Expression.evaluate(input.value, mode);
             result = numericResult.toString();
         } catch (e) {
             result = (<any>e).toString();
