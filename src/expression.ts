@@ -459,6 +459,10 @@ export abstract class Expression {
 
     protected static get defaultFunctions(): { [key: string]: FunctionDefinition } {
         return {
+            "acos": new FunctionDefinition(1, 1, Expression.wrapNumeric("acos", Math.acos)),
+            "asin": new FunctionDefinition(1, 1, Expression.wrapNumeric("asin", Math.asin)),
+            "atan": new FunctionDefinition(1, 1, Expression.wrapNumeric("atan", Math.atan)),
+            "atan2": new FunctionDefinition(2, 2, Expression.wrapNumeric("atan2", Math.atan2)),
             "cos": new FunctionDefinition(1, 1, Expression.wrapNumeric("cos", Math.cos)),
             "diff": new FunctionDefinition(2, 2, (args, variables) => {
                 const expr = args[0];
