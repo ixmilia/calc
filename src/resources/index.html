@@ -5,13 +5,27 @@
 </head>
 
 <body>
-  <textarea id="results" rows="20" cols="80"></textarea><br />
+  <textarea id="results" rows="20" cols="80" readonly></textarea><br />
   <input type="text" id="input" />
   <button id="eval">Eval</button>
   <input type="radio" id="mode-radians" name="mode" value="rad" />
   <label for="mode">Radians</label>
   <input type="radio" id="mode-degrees" name="mode" value="deg" />
   <label for="mode">Degrees</label>
+  <br />
+
+  <label for="minx">Min X</label>
+  <input type="number" id="minx" value="-10" />
+  <label for="maxx">Max X</label>
+  <input type="number" id="maxx" value="10" /><br />
+  <label for="miny">Min Y</label>
+  <input type="number" id="miny" value="-10" />
+  <label for="maxy">Max Y</label>
+  <input type="number" id="maxy" value="10" /><br />
+  <canvas id="graph" width="400" height="400"></canvas>
+  <br />
+  <span>y=</span><input type="text" id="function" />
+  <button id="draw">Draw</button>
 </body>
 
 </html>
