@@ -1,5 +1,5 @@
 import { BinaryOperator, Operators, UnaryOperator } from "./operator.js";
-import { FunctionCallToken, IdentifierToken, NumberToken, OperatorToken, PunctuationToken, Token } from "./token.js";
+import { FloatToken, FunctionCallToken, IdentifierToken, IntegerToken, OperatorToken, PunctuationToken, Token } from "./token.js";
 
 export enum Mode {
     Radians = 0,
@@ -121,7 +121,11 @@ export abstract class Expression {
                     break;
                 case 'number':
                     minusIsUnary = false;
-                    tokens.push(new NumberToken(current, position, parseFloat(current)));
+                    if (current.match(/^\d+$/)) {
+                        tokens.push(new IntegerToken(current, position, parseInt(current)));
+                    } else {
+                        tokens.push(new FloatToken(current, position, parseFloat(current)));
+                    }
                     break;
             }
         }
@@ -248,7 +252,8 @@ export abstract class Expression {
                 case 'identifier':
                     outputQueue.push(token);
                     break;
-                case 'number':
+                case 'integer':
+                case 'float':
                     outputQueue.push(token);
                     break;
                 case 'operator':
@@ -310,7 +315,7 @@ export abstract class Expression {
                     }
                     break;
                 default:
-                    throw new Error(`Unexpected token ${token.text}`);
+                    throw new Error(`Unexpected token ${token.text} (${token.type})`);
             }
         }
 
@@ -361,8 +366,11 @@ export abstract class Expression {
                 case 'identifier':
                     stack.push(new VariableExpression((<IdentifierToken>token).text));
                     break;
-                case 'number':
-                    stack.push(new NumberExpression((<NumberToken>token).value));
+                case 'integer':
+                    stack.push(new IntegerExpression((<IntegerToken>token).value));
+                    break;
+                case 'float':
+                    stack.push(new FloatExpression((<FloatToken>token).value));
                     break;
                 case 'operator':
                     const opToken = <OperatorToken>token;
@@ -397,19 +405,18 @@ export abstract class Expression {
 
     private static get defaultVariables(): { [key: string]: Expression } {
         return {
-            'pi': new NumberExpression(Math.PI),
-            'e': new NumberExpression(Math.E)
+            'pi': new FloatExpression(Math.PI),
+            'e': new FloatExpression(Math.E)
         };
     };
 
-    private static wrapNumeric(name: string, fn: (...args: number[]) => number): (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression {
+    private static wrapNumberFunction(name: string, fn: (...args: number[]) => number): (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression {
         return (args, mode, variables) => {
             const evaluatedArgs = args.map(a => a.evaluate(mode, variables));
-            if (evaluatedArgs.every(e => this.isNumber(e))) {
-                const numericArgs = evaluatedArgs.map(e => (<NumberExpression>e).value);
-                const numericResult = fn(...numericArgs);
-                const expressionResult = new NumberExpression(numericResult);
-                return expressionResult;
+            if (evaluatedArgs.every(e => this.isNumeric(e))) {
+                const numberArgs = evaluatedArgs.map(e => (<NumericExpression>e).asFloat().value);
+                const numberResult = fn(...numberArgs);
+                return new FloatExpression(numberResult);
             }
 
             return new FunctionCallExpression(new FunctionCallToken(new IdentifierToken(name, -1), evaluatedArgs.length), evaluatedArgs);
@@ -418,26 +425,25 @@ export abstract class Expression {
 
     // TODO: make these expressions
     private static get RadiansToDegrees(): Expression {
-        return new BinaryExpression(new NumberExpression(180), new VariableExpression('pi'), Operators.DivideOperator);
+        return new BinaryExpression(new FloatExpression(180), new VariableExpression('pi'), Operators.DivideOperator);
     }
 
     private static get DegreesToRadians(): Expression {
-        return new BinaryExpression(new VariableExpression('pi'), new NumberExpression(180), Operators.DivideOperator);
+        return new BinaryExpression(new VariableExpression('pi'), new FloatExpression(180), Operators.DivideOperator);
     }
 
     private static wrapTrig(name: string, fn: (...args: number[]) => number): (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression {
         return (args, mode, variables) => {
-            const multiplier = mode === Mode.Degrees ? Expression.DegreesToRadians : new NumberExpression(1);
+            const multiplier = mode === Mode.Degrees ? Expression.DegreesToRadians : new FloatExpression(1);
             const evaluatedArgs = args.map(a => {
                 const argExpression = new BinaryExpression(a, multiplier, Operators.MultiplyOperator);
                 const argResult = argExpression.evaluate(mode, variables);
                 return argResult;
             });
-            if (evaluatedArgs.every(e => this.isNumber(e))) {
-                const numericArgs = evaluatedArgs.map(e => (<NumberExpression>e).value);
-                const numericResult = fn(...numericArgs);
-                const expressionResult = new NumberExpression(numericResult);
-                return expressionResult;
+            if (evaluatedArgs.every(e => this.isNumeric(e))) {
+                const floatArgs = evaluatedArgs.map(e => (<NumericExpression>e).asFloat().value);
+                const floatResult = fn(...floatArgs);
+                return new FloatExpression(floatResult);
             }
 
             return new FunctionCallExpression(new FunctionCallToken(new IdentifierToken(name, -1), evaluatedArgs.length), evaluatedArgs);
@@ -446,8 +452,8 @@ export abstract class Expression {
 
     private static wrapTrigArc(name: string, fn: (...args: number[]) => number): (args: Expression[], mode: Mode, variables: { [key: string]: Expression }) => Expression {
         return (args, mode, variables) => {
-            const multiplier = mode === Mode.Degrees ? Expression.RadiansToDegrees : new NumberExpression(1);
-            const intermediateResult = this.wrapNumeric(name, fn)(args, mode, variables);
+            const multiplier = mode === Mode.Degrees ? Expression.RadiansToDegrees : new FloatExpression(1);
+            const intermediateResult = this.wrapNumberFunction(name, fn)(args, mode, variables);
             const multipliedExpression = new BinaryExpression(intermediateResult, multiplier, Operators.MultiplyOperator);
             const multipliedResult = multipliedExpression.evaluate(mode, variables);
             return multipliedResult;
@@ -456,12 +462,14 @@ export abstract class Expression {
 
     private static diff(expression: Expression, variable: string): Expression {
         switch (expression.type) {
-            case 'number':
-                return new NumberExpression(0);
+            case 'float':
+            case 'integer':
+            case 'ratio':
+                return new IntegerExpression(0);
             case 'variable':
                 const variableExpression = <VariableExpression>expression;
                 if (variableExpression.name === variable) {
-                    return new NumberExpression(1);
+                    return new IntegerExpression(1);
                 }
 
                 return expression;
@@ -489,7 +497,7 @@ export abstract class Expression {
                             binaryExpression.right,
                             new BinaryExpression(
                                 binaryExpression.left,
-                                new BinaryExpression(binaryExpression.right, new NumberExpression(1), Operators.SubtractOperator),
+                                new BinaryExpression(binaryExpression.right, new IntegerExpression(1), Operators.SubtractOperator),
                                 Operators.ExponentiateOperator),
                             Operators.MultiplyOperator);
                     default:
@@ -513,10 +521,10 @@ export abstract class Expression {
                 const expressionResult = this.diff(expr, ident.name);
                 return expressionResult.evaluate(mode, variables);
             }),
-            "ln": new FunctionDefinition(1, 1, Expression.wrapNumeric("ln", Math.log)),
-            "log": new FunctionDefinition(2, 2, Expression.wrapNumeric("log", (...args: number[]) => Math.log(args[1]) / Math.log(args[0]))),
-            "max": new FunctionDefinition(2, 2, Expression.wrapNumeric("max", Math.max)),
-            "min": new FunctionDefinition(2, 2, Expression.wrapNumeric("min", Math.min)),
+            "ln": new FunctionDefinition(1, 1, Expression.wrapNumberFunction("ln", Math.log)),
+            "log": new FunctionDefinition(2, 2, Expression.wrapNumberFunction("log", (...args: number[]) => Math.log(args[1]) / Math.log(args[0]))),
+            "max": new FunctionDefinition(2, 2, Expression.wrapNumberFunction("max", Math.max)),
+            "min": new FunctionDefinition(2, 2, Expression.wrapNumberFunction("min", Math.min)),
             "sin": new FunctionDefinition(1, 1, Expression.wrapTrig("sin", Math.sin)),
             "sum": new FunctionDefinition(4, 4, (args, mode, variables) => {
                 const expr = args[0];
@@ -524,13 +532,13 @@ export abstract class Expression {
                 const start = args[2].evaluate(mode, variables);
                 const end = args[3].evaluate(mode, variables);
 
-                if (!Expression.isNumber(start) || !Expression.isNumber(end)) {
-                    throw new Error("Sum bounds must be numbers");
+                if (!Expression.isInteger(start) || !Expression.isInteger(end)) {
+                    throw new Error("Sum bounds must be integers");
                 }
 
-                let result: Expression = new NumberExpression(0);
+                let result: Expression = new IntegerExpression(0);
                 for (let i = start.value; i <= end.value; i++) {
-                    const next = expr.evaluate(mode, { ...variables, [ident.name]: new NumberExpression(i) });
+                    const next = expr.evaluate(mode, { ...variables, [ident.name]: new IntegerExpression(i) });
                     result = new BinaryExpression(result, next, Operators.AddOperator).evaluate(mode, variables);
                 }
 
@@ -555,8 +563,20 @@ export abstract class Expression {
         return expr.evaluate(modeToUse, combinedVariables);
     }
 
-    static isNumber(expression: Expression): expression is NumberExpression {
-        return expression.type === 'number';
+    static isNumeric(expression: Expression): expression is NumericExpression {
+        return this.isInteger(expression) || this.isFloat(expression) || this.isRatio(expression);
+    }
+
+    static isInteger(expression: Expression): expression is IntegerExpression {
+        return expression.type === 'integer';
+    }
+
+    static isFloat(expression: Expression): expression is FloatExpression {
+        return expression.type === 'float';
+    }
+
+    static isRatio(expression: Expression): expression is RatioExpression {
+        return expression.type === 'ratio';
     }
 
     static isVariable(expression: Expression): expression is VariableExpression {
@@ -576,9 +596,34 @@ export abstract class Expression {
     }
 }
 
-export class NumberExpression extends Expression {
-    constructor(readonly value: number) {
-        super('number');
+export abstract class NumericExpression extends Expression {
+    abstract asFloat(): FloatExpression;
+    abstract isZero(): boolean;
+    abstract isOne(): boolean;
+}
+
+export class IntegerExpression extends NumericExpression {
+    private _value: number;
+
+    constructor(value: number) {
+        super('integer');
+        this._value = Math.trunc(value);
+    }
+
+    get value() {
+        return this._value;
+    }
+
+    asFloat(): FloatExpression {
+        return new FloatExpression(this.value);
+    }
+
+    isZero(): boolean {
+        return this.value === 0;
+    }
+
+    isOne(): boolean {
+        return this.value === 1;
     }
 
     evaluate(_mode: Mode, _variables: { [key: string]: Expression }): Expression {
@@ -587,6 +632,105 @@ export class NumberExpression extends Expression {
 
     toString(): string {
         return this.value.toString();
+    }
+}
+
+export class FloatExpression extends NumericExpression {
+    constructor(readonly value: number) {
+        super('float');
+    }
+
+    asFloat(): FloatExpression {
+        return this;
+    }
+
+    isZero(): boolean {
+        return this.value === 0;
+    }
+
+    isOne(): boolean {
+        return this.value === 1;
+    }
+
+    evaluate(_mode: Mode, _variables: { [key: string]: Expression }): Expression {
+        return this;
+    }
+
+    toString(): string {
+        return this.value.toString();
+    }
+}
+
+export class RatioExpression extends NumericExpression {
+    private _numerator: number;
+    private _denominator: number;
+
+    constructor(numerator: number, denominator: number) {
+        super('ratio');
+        this._numerator = Math.trunc(numerator);
+        this._denominator = Math.trunc(denominator);
+    }
+
+    get numerator() {
+        return this._numerator;
+    }
+
+    get denominator() {
+        return this._denominator;
+    }
+
+    private static gcd(a: number, b: number): number {
+        while (b != 0) {
+            const temp = a % b;
+            a = b;
+            b = temp;
+        }
+
+        return a;
+    }
+
+    reduce(): NumericExpression {
+        const gcd = RatioExpression.gcd(Math.abs(this.numerator), Math.abs(this.denominator));
+        let numerator = Math.abs(this.numerator / gcd);
+        const denominator = Math.abs(this.denominator / gcd);
+
+        if (Math.sign(this.numerator) != Math.sign(this.denominator)) {
+            numerator *= -1;
+        }
+
+        if (numerator === 0) {
+            return new IntegerExpression(0);
+        }
+
+        if (denominator === 1) {
+            return new IntegerExpression(numerator);
+        }
+
+        if (numerator === this.numerator && denominator === this.denominator) {
+            return this;
+        }
+
+        return new RatioExpression(numerator, denominator);
+    }
+
+    asFloat(): FloatExpression {
+        return new FloatExpression(this.numerator / this.denominator);
+    }
+
+    isZero(): boolean {
+        return this.numerator === 0;
+    }
+
+    isOne(): boolean {
+        return this.numerator === this.denominator;
+    }
+
+    evaluate(_mode: Mode, _variables: { [key: string]: Expression }): Expression {
+        return this;
+    }
+
+    toString(): string {
+        return `${this.numerator}/${this.denominator}`;
     }
 }
 

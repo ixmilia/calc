@@ -1,4 +1,4 @@
-import { Expression, Mode, NumberExpression } from "./expression.js";
+import { Expression, FloatExpression, Mode, NumericExpression } from "./expression.js";
 
 function main() {
     const results = <HTMLTextAreaElement>document.getElementById('results')!;
@@ -71,14 +71,10 @@ function drawGraph(expression: string, graphCanvas: HTMLCanvasElement, mode: Mod
     let isDrawing = false;
     for (let xcoord = 0; xcoord < graphCanvas.width; xcoord++) {
         const x = xmin + xcoord / graphCanvas.width * (xmax - xmin);
-        const y = Expression.evaluate(expression, mode, { 'x': new NumberExpression(x) });
-        if (Expression.isNumber(y)) {
-            if (xcoord == 198) {
-                const x = 1;
-                const y = x + 1;
-                console.log(x);
-            }
-            const ycoord = graphCanvas.height - (y.value - ymin) / (ymax - ymin) * graphCanvas.height;
+        const y = Expression.evaluate(expression, mode, { 'x': new FloatExpression(x) });
+        if (Expression.isNumeric(y)) {
+            const yFloat = (<NumericExpression>y).asFloat();
+            const ycoord = graphCanvas.height - (yFloat.value - ymin) / (ymax - ymin) * graphCanvas.height;
             const isVisible = isPointVisible(xcoord, ycoord);
             if (isDrawing || isVisible) {
                 context.lineTo(xcoord, ycoord);

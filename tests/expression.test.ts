@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { Expression, Mode, NumberExpression } from '../src/expression.js';
+import { Expression, FloatExpression, IntegerExpression, Mode, NumericExpression } from '../src/expression.js';
 
 describe('expression', () => {
     describe('parsing', () => {
@@ -15,7 +15,7 @@ describe('expression', () => {
                     },
                     operand: {
                         ...o.left.operand,
-                        value: 3,
+                        _value: 3,
                     },
                 },
                 operator: {
@@ -24,16 +24,36 @@ describe('expression', () => {
                 },
                 right: {
                     ...o.right,
-                    value: 4,
+                    _value: 4,
                 },
             })
         });
+        it('correctly parses integers', () => {
+            const expr = Expression.parse('123');
+            expect(expr.type).to.equal('integer');
+        });
+        it('correctly parses floats with trailing digits', () => {
+            const expr = Expression.parse('123.456');
+            expect(expr.type).to.equal('float');
+        });
+        it('correctly parses floats with trailing decimal', () => {
+            const expr = Expression.parse('123.');
+            expect(expr.type).to.equal('float');
+        });
     });
     describe('evaluation', () => {
+        function evaluate(expression: string, variables?: { [key: string]: Expression }): NumericExpression {
+            const result = Expression.evaluate(expression, Mode.Radians, variables);
+            if (result instanceof NumericExpression) {
+                return result;
+            }
+
+            throw new Error(`Expected a numeric expression, got: ${JSON.stringify(result)}`);
+        }
         function evaluateAsNumber(expression: string, variables?: { [key: string]: Expression }): number {
             const result = Expression.evaluate(expression, Mode.Radians, variables);
-            if (result instanceof NumberExpression) {
-                return result.value;
+            if (result instanceof NumericExpression) {
+                return result.asFloat().value;
             }
 
             throw new Error(`Expected a number expression, got: ${JSON.stringify(result)}`);
@@ -47,12 +67,20 @@ describe('expression', () => {
             const result = evaluateAsNumber('3+4*5');
             expect(result).to.equal(23);
         });
+        it('simplifies ratios from integer operations', () => {
+            const result = evaluate('2/4');
+            expect(result.toString()).to.equal('1/2');
+        });
+        it('reverts to float for non-integer operations', () => {
+            const result = evaluate('2/4.');
+            expect(result.toString()).to.equal('0.5');
+        });
         it('expands built-in variables', () => {
             const result = evaluateAsNumber('pi*2');
             expect(result).to.equal(Math.PI * 2);
         });
         it('expands custom variables', () => {
-            const result = evaluateAsNumber('x*2', { x: new NumberExpression(3) });
+            const result = evaluateAsNumber('x*2', { x: new IntegerExpression(3) });
             expect(result).to.equal(6);
         });
         it('honors parentheses', () => {
@@ -77,23 +105,23 @@ describe('expression', () => {
         });
         it('computes trig functions in the appropriate mode: degrees', () => {
             const result = Expression.evaluate('sin(90)', Mode.Degrees);
-            expect(Expression.isNumber(result)).to.be.true;
-            expect((<NumberExpression>result).value).to.be.closeTo(1, 0.0001);
+            expect(Expression.isFloat(result)).to.be.true;
+            expect((<FloatExpression>result).value).to.be.closeTo(1, 0.0001);
         });
         it('computes trig functions in the appropriate mode: radians', () => {
             const result = Expression.evaluate('sin(pi/2)', Mode.Radians);
-            expect(Expression.isNumber(result)).to.be.true;
-            expect((<NumberExpression>result).value).to.be.closeTo(1, 0.0001);
+            expect(Expression.isFloat(result)).to.be.true;
+            expect((<FloatExpression>result).value).to.be.closeTo(1, 0.0001);
         });
         it('computes arc trig functions in the appropriate mode: degrees', () => {
             const result = Expression.evaluate('asin(1)', Mode.Degrees);
-            expect(Expression.isNumber(result)).to.be.true;
-            expect((<NumberExpression>result).value).to.be.closeTo(90, 0.0001);
+            expect(Expression.isFloat(result)).to.be.true;
+            expect((<FloatExpression>result).value).to.be.closeTo(90, 0.0001);
         });
         it('computes arc trig functions in the appropriate mode: radians', () => {
             const result = Expression.evaluate('asin(1)', Mode.Radians);
-            expect(Expression.isNumber(result)).to.be.true;
-            expect((<NumberExpression>result).value).to.be.closeTo(Math.PI / 2, 0.0001);
+            expect(Expression.isFloat(result)).to.be.true;
+            expect((<FloatExpression>result).value).to.be.closeTo(Math.PI / 2, 0.0001);
         });
     });
 });

@@ -1,4 +1,4 @@
-import { BinaryExpression, Expression, Mode, NumberExpression } from "./expression.js";
+import { BinaryExpression, Expression, FloatExpression, IntegerExpression, Mode, NumericExpression, RatioExpression } from "./expression.js";
 
 export abstract class Operator {
     constructor(readonly symbol: string, readonly minimumArgumentCount: number, readonly maximumArgumentCount: number) {
@@ -17,25 +17,25 @@ export abstract class Operator {
         }
 
         const evaluatedArgs = args.map(a => a.evaluate(mode, variables));
-        if (evaluatedArgs.every(a => Expression.isNumber(a))) {
-            const evaluatedNumericArgs = evaluatedArgs.map(a => (<NumberExpression>a).value);
-            const numericResult = this.evaluateNumericInternal(evaluatedNumericArgs);
-            return new NumberExpression(numericResult);
+        if (evaluatedArgs.every(a => Expression.isNumeric(a))) {
+            const numericArgs = evaluatedArgs.map(a => <NumericExpression>a);
+            const numericResult = this.evaluateNumericInternal(numericArgs);
+            return numericResult;
         }
 
         return this.evaluateExpressionInternal(evaluatedArgs);
     }
 
-    protected abstract evaluateNumericInternal(args: number[]): number;
+    protected abstract evaluateNumericInternal(args: NumericExpression[]): NumericExpression;
     protected abstract evaluateExpressionInternal(args: Expression[]): Expression;
 }
 
 export class UnaryOperator extends Operator {
-    constructor(symbol: string, private numericOperation: (operand: number) => number, private expressionOperation: (operand: Expression) => Expression) {
+    constructor(symbol: string, private numericOperation: (operand: NumericExpression) => NumericExpression, private expressionOperation: (operand: Expression) => Expression) {
         super(symbol, 1, 1);
     }
 
-    protected evaluateNumericInternal(args: number[]): number {
+    protected evaluateNumericInternal(args: NumericExpression[]): NumericExpression {
         return this.numericOperation(args[0]);
     }
 
@@ -45,11 +45,11 @@ export class UnaryOperator extends Operator {
 }
 
 export class BinaryOperator extends Operator {
-    constructor(symbol: string, private numericOperation: (left: number, right: number) => number, private expressionOperation: (left: Expression, right: Expression) => Expression) {
+    constructor(symbol: string, private numericOperation: (left: NumericExpression, right: NumericExpression) => NumericExpression, private expressionOperation: (left: Expression, right: Expression) => Expression) {
         super(symbol, 2, 2);
     }
 
-    protected evaluateNumericInternal(args: number[]): number {
+    protected evaluateNumericInternal(args: NumericExpression[]): NumericExpression {
         return this.numericOperation(args[0], args[1]);
     }
 
@@ -59,119 +59,157 @@ export class BinaryOperator extends Operator {
 }
 
 export class Operators {
-    static readonly NegateOperator = new UnaryOperator('~', operand => -operand, operand => operand);
-    static readonly FactorialOperator = new UnaryOperator('!', operand => {
-        if (operand < 0) {
-            return Number.NEGATIVE_INFINITY;
-        }
-
-        let result = 1;
-        for (let i = operand; i > 1; i--) {
-            result *= i;
-        }
-
-        return result;
-    }, operand => operand);
-    static readonly AddOperator: BinaryOperator = new BinaryOperator('+', (left, right) => left + right, (left, right) => {
-        if (Expression.isNumber(left) && Expression.isNumber(right)) {
-            return new NumberExpression((<NumberExpression>left).value + (<NumberExpression>right).value);
-        }
-
-        // ensure left is a number
-        let swapped = false;
-        if (Expression.isNumber(right)) {
-            [left, right] = [right, left];
-            swapped = true;
-        }
-
-        if (Expression.isNumber(left) && left.value == 0) {
-            return right;
-        }
-
-        // TODO: handle more cases
-        if (swapped) {
-            [left, right] = [right, left];
-        }
-
-        return new BinaryExpression(left, right, Operators.AddOperator);
-    });
-    static readonly SubtractOperator: BinaryOperator = new BinaryOperator('-', (left, right) => left - right, (left, right) => {
-        if (Expression.isNumber(left) && Expression.isNumber(right)) {
-            return new NumberExpression((<NumberExpression>left).value - (<NumberExpression>right).value);
-        }
-
-        if (Expression.isNumber(right) && right.value == 0) {
-            return left;
-        }
-
-        // TODO: handle more cases, like same expression on both sides
-        return new BinaryExpression(left, right, Operators.SubtractOperator);
-    });
-    static readonly MultiplyOperator: BinaryOperator = new BinaryOperator('*', (left, right) => left * right, (left, right) => {
-        if (Expression.isNumber(left) && Expression.isNumber(right)) {
-            return new NumberExpression((<NumberExpression>left).value * (<NumberExpression>right).value);
-        }
-
-        // ensure left is a number
-        let swapped = false;
-        if (Expression.isNumber(right)) {
-            [left, right] = [right, left];
-            swapped = true;
-        }
-
-        if (Expression.isNumber(left) && left.value == 1) {
-            return right;
-        }
-
-        if (Expression.isNumber(left) && left.value == 0) {
-            return new NumberExpression(0);
-        }
-
-        // TODO: handle more cases
-        if (swapped) {
-            [left, right] = [right, left];
-        }
-        return new BinaryExpression(left, right, Operators.MultiplyOperator);
-    });
-    static readonly DivideOperator: BinaryOperator = new BinaryOperator('/', (left, right) => left / right, (left, right) => {
-        if (Expression.isNumber(left) && Expression.isNumber(right)) {
-            return new NumberExpression((<NumberExpression>left).value / (<NumberExpression>right).value);
-        }
-
-        if (Expression.isNumber(right)) {
-            if (right.value == 1) {
-                return left;
-            } else if (right.value == 0) {
-                throw new Error('Division by zero');
+    static readonly NegateOperator = new UnaryOperator(
+        '~',
+        operand => {
+            if (Expression.isFloat(operand)) {
+                return new FloatExpression(-operand.value);
             }
-        }
 
-        if (Expression.isNumber(left) && left.value == 0) {
-            return new NumberExpression(0);
-        }
+            if (Expression.isRatio(operand)) {
+                return new RatioExpression(-operand.numerator, operand.denominator);
+            }
 
-        // TODO: handle more cases
-        return new BinaryExpression(left, right, Operators.DivideOperator);
-    });
-    static readonly ExponentiateOperator: BinaryOperator = new BinaryOperator('^', (left, right) => left ** right, (left, right) => {
-        if (Expression.isNumber(right)) {
-            if (right.value === 0) {
-                return new NumberExpression(1);
-            } else if (right.value === 1) {
+            return new IntegerExpression(-(<IntegerExpression>operand).value);
+        },
+        operand => operand
+    );
+    static readonly FactorialOperator = new UnaryOperator(
+        '!',
+        operand => {
+            if (!Expression.isInteger(operand)) {
+                throw new Error('Factorial can only be applied to integers');
+            }
+
+            let result = 1;
+            for (let i = operand.value; i > 1; i--) {
+                result *= i;
+            }
+
+            return new IntegerExpression(result);
+        },
+        operand => operand
+    );
+    static readonly AddOperator: BinaryOperator = new BinaryOperator(
+        '+',
+        (left, right) => this.addSubNumerics(left, right, (a, b) => a + b),
+        (left, right) => {
+            if (Expression.isNumeric(left) && Expression.isNumeric(right)) {
+                return this.addSubNumerics(<NumericExpression>left, <NumericExpression>right, (a, b) => a + b);
+            }
+
+            // ensure left is a number
+            let swapped = false;
+            if (Expression.isNumeric(right)) {
+                [left, right] = [right, left];
+                swapped = true;
+            }
+
+            if (Expression.isNumeric(left) && left.isZero()) {
+                return right;
+            }
+
+            // TODO: handle more cases
+            if (swapped) {
+                [left, right] = [right, left];
+            }
+
+            return new BinaryExpression(left, right, Operators.AddOperator);
+        }
+    );
+    static readonly SubtractOperator: BinaryOperator = new BinaryOperator(
+        '-',
+        (left, right) => this.addSubNumerics(left, right, (a, b) => a - b),
+        (left, right) => {
+            if (Expression.isNumeric(left) && Expression.isNumeric(right)) {
+                return this.addSubNumerics(<NumericExpression>left, <NumericExpression>right, (a, b) => a - b);
+            }
+
+            if (Expression.isNumeric(right) && right.isZero()) {
                 return left;
             }
-        }
 
-        if (Expression.isNumber(left)) {
-            if (left.value === 0) {
-                return new NumberExpression(0);
-            } else if (left.value === 1) {
-                return new NumberExpression(1);
+            // TODO: handle more cases, like same expression on both sides or left is zero => negate right
+            return new BinaryExpression(left, right, Operators.SubtractOperator);
+        }
+    );
+    static readonly MultiplyOperator: BinaryOperator = new BinaryOperator(
+        '*',
+        (left, right) => this.multiplyNumerics(left, right),
+        (left, right) => {
+            if (Expression.isNumeric(left) && Expression.isNumeric(right)) {
+                return this.multiplyNumerics(<NumericExpression>left, <NumericExpression>right);
             }
-        }
 
-        return new BinaryExpression(left, right, Operators.ExponentiateOperator);
-    });
+            // ensure left is a number
+            let swapped = false;
+            if (Expression.isNumeric(right)) {
+                [left, right] = [right, left];
+                swapped = true;
+            }
+
+            if (Expression.isNumeric(left) && left.isOne()) {
+                return right;
+            }
+
+            if (Expression.isNumeric(left) && left.isZero()) {
+                return new IntegerExpression(0);
+            }
+
+            // TODO: handle more cases
+            if (swapped) {
+                [left, right] = [right, left];
+            }
+            return new BinaryExpression(left, right, Operators.MultiplyOperator);
+        }
+    );
+    static readonly DivideOperator: BinaryOperator = new BinaryOperator(
+        '/',
+        (left, right) => this.divideNumerics(left, right),
+        (left, right) => {
+            if (Expression.isNumeric(left) && Expression.isNumeric(right)) {
+                return this.divideNumerics(<NumericExpression>left, <NumericExpression>right);
+            }
+
+            if (Expression.isNumeric(right)) {
+                if (right.isOne()) {
+                    return left;
+                } else if (right.isZero()) {
+                    throw new Error('Division by zero');
+                }
+            }
+
+            if (Expression.isNumeric(left) && left.isZero()) {
+                return new IntegerExpression(0);
+            }
+
+            // TODO: handle more cases
+            return new BinaryExpression(left, right, Operators.DivideOperator);
+        }
+    );
+    static readonly ExponentiateOperator: BinaryOperator = new BinaryOperator(
+        '^',
+        (left, right) => this.exponentiateNumerics(left, right),
+        (left, right) => {
+            if (Expression.isNumeric(right)) {
+                if (right.isZero()) {
+                    return new IntegerExpression(1);
+                } else if (right.isOne()) {
+                    return left;
+                }
+            }
+
+            if (Expression.isNumeric(left)) {
+                if (left.isZero()) {
+                    return new IntegerExpression(0);
+                } else if (left.isOne()) {
+                    return new IntegerExpression(1);
+                }
+            }
+
+            return new BinaryExpression(left, right, Operators.ExponentiateOperator);
+        }
+    );
 
     static readonly WellKnownOperators: Operator[] = [
         Operators.NegateOperator,
@@ -190,5 +228,58 @@ export class Operators {
         }
 
         return operator;
+    }
+
+    private static addSubNumerics(left: NumericExpression, right: NumericExpression, op: (a: number, b: number) => number): NumericExpression {
+        // if anything is a float, we're forever stuck here
+        if (Expression.isFloat(left) || Expression.isFloat(right)) {
+            return new FloatExpression(op(left.asFloat().value, right.asFloat().value));
+        }
+
+        // otherwise treat both as a ratio and simplify
+        const leftRatio = Expression.isRatio(left) ? left : new RatioExpression((<IntegerExpression>left).value, 1);
+        const rightRatio = Expression.isRatio(right) ? right : new RatioExpression((<IntegerExpression>right).value, 1);
+        const denominator = leftRatio.denominator * rightRatio.denominator;
+        const numerator = op(leftRatio.numerator * rightRatio.denominator, rightRatio.numerator * leftRatio.denominator);
+        const result = new RatioExpression(numerator, denominator);
+        const reduced = result.reduce();
+        return reduced;
+    }
+
+    private static multiplyNumerics(left: NumericExpression, right: NumericExpression): NumericExpression {
+        // if anything is a float, we're forever stuck here
+        if (Expression.isFloat(left) || Expression.isFloat(right)) {
+            return new FloatExpression(left.asFloat().value * right.asFloat().value);
+        }
+
+        // otherwise treat both as a ratio and simplify
+        const leftRatio = Expression.isRatio(left) ? left : new RatioExpression((<IntegerExpression>left).value, 1);
+        const rightRatio = Expression.isRatio(right) ? right : new RatioExpression((<IntegerExpression>right).value, 1);
+        const numerator = leftRatio.numerator * rightRatio.numerator;
+        const denominator = leftRatio.denominator * rightRatio.denominator;
+        const result = new RatioExpression(numerator, denominator);
+        const reduced = result.reduce();
+        return reduced;
+    }
+
+    private static divideNumerics(left: NumericExpression, right: NumericExpression): NumericExpression {
+        // if anything is a float, we're forever stuck here
+        if (Expression.isFloat(left) || Expression.isFloat(right)) {
+            return new FloatExpression(left.asFloat().value / right.asFloat().value);
+        }
+
+        // otherwise treat both as a ratio and simplify
+        const leftRatio = Expression.isRatio(left) ? left : new RatioExpression((<IntegerExpression>left).value, 1);
+        const rightRatio = Expression.isRatio(right) ? right : new RatioExpression((<IntegerExpression>right).value, 1);
+        const rightInverted = new RatioExpression(rightRatio.denominator, rightRatio.numerator);
+        return this.multiplyNumerics(leftRatio, rightInverted);
+    }
+
+    private static exponentiateNumerics(left: NumericExpression, right: NumericExpression): NumericExpression {
+        // always treat as a float
+        // TODO: make this better
+        const leftFloat = left.asFloat().value;
+        const rightFloat = right.asFloat().value;
+        return new FloatExpression(leftFloat ** rightFloat);
     }
 }

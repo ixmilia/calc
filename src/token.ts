@@ -3,9 +3,15 @@ export abstract class Token {
     }
 }
 
-export class NumberToken extends Token {
+export class IntegerToken extends Token {
     constructor(text: string, position: number, public readonly value: number) {
-        super('number', text, position);
+        super('integer', text, position);
+    }
+}
+
+export class FloatToken extends Token {
+    constructor(text: string, position: number, public readonly value: number) {
+        super('float', text, position);
     }
 }
 
