@@ -510,6 +510,7 @@ export abstract class Expression {
 
     protected static get defaultFunctions(): { [key: string]: FunctionDefinition } {
         return {
+            "abs": new FunctionDefinition(1, 1, Expression.wrapNumberFunction("abs", Math.abs)),
             "acos": new FunctionDefinition(1, 1, Expression.wrapTrigArc("acos", Math.acos)),
             "asin": new FunctionDefinition(1, 1, Expression.wrapTrigArc("asin", Math.asin)),
             "atan": new FunctionDefinition(1, 1, Expression.wrapTrigArc("atan", Math.atan)),
@@ -526,6 +527,7 @@ export abstract class Expression {
             "max": new FunctionDefinition(2, 2, Expression.wrapNumberFunction("max", Math.max)),
             "min": new FunctionDefinition(2, 2, Expression.wrapNumberFunction("min", Math.min)),
             "sin": new FunctionDefinition(1, 1, Expression.wrapTrig("sin", Math.sin)),
+            "sqrt": new FunctionDefinition(1, 1, Expression.wrapNumberFunction("sqrt", Math.sqrt)),
             "sum": new FunctionDefinition(4, 4, (args, mode, variables) => {
                 const expr = args[0];
                 const ident = <VariableExpression>args[1];
